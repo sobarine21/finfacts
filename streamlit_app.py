@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment
 import weasyprint
-import os
 import base64
+from io import BytesIO
 
 # --- Streamlit App ---
 st.title("Factsheet Generator")
@@ -43,8 +43,8 @@ if csv_file and template_file:
                 }
 
             # --- Template Rendering and PDF Generation ---
-            env = Environment(loader=FileSystemLoader("."))
-            template = env.get_template(template_file.name)
+            env = Environment()  # No loader needed for in-memory templates
+            template = env.from_string(template_file.getvalue().decode("utf-8"))  # Use template content directly
 
             for index, row in df.iterrows():  # Iterate for multiple factsheets
                 fund_data = row.to_dict()
@@ -58,20 +58,19 @@ if csv_file and template_file:
                     fund_data["logo_base64"] = None  # Explicitly set to None if no logo
 
                 html_output = template.render(fund_data)
-                output_pdf_path = f"generated_factsheet_{fund_data.get('Fund Name')}.pdf"
-                weasyprint.HTML(string=html_output).write_pdf(output_pdf_path)
+
+                # --- PDF Generation (In-memory) ---
+                pdf_bytes = weasyprint.HTML(string=html_output).write_pdf() # In-memory PDF
 
                 # --- Download Link ---
-                with open(output_pdf_path, "rb") as f:
-                    pdf_bytes = f.read()
                 st.download_button(
                     label=f"Download Factsheet for {fund_data.get('Fund Name')}",
                     data=pdf_bytes,
-                    file_name=output_pdf_path,
+                    file_name=f"generated_factsheet_{fund_data.get('Fund Name')}.pdf",
                     mime="application/pdf",
                 )
 
-                os.remove(output_pdf_path)  # Clean up
+
 
         except Exception as e:
             st.error(f"An error occurred: {e}")
@@ -79,9 +78,9 @@ if csv_file and template_file:
 
 
 # --- Example Template (factsheet_template.html) ---
-# (Place this in the same directory as your Python script)
+# (This is now a multiline string in the code)
 
-"""
+template_str = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -147,7 +146,7 @@ if csv_file and template_file:
 """
 
 # --- Example CSV Data (factsheet_data.csv) ---
-"""
+csv_data = """
 Fund Name,Investment Strategy,Management Fee,Brokerage Fee,January,February,March,April,May,June,SAPY_January,SAPY_February,SAPY_March,SAPY_April,SAPY_May,SAPY_June
 Growth Port,Value Investing,1.5%,0.6%,-0.1%,0.94%,8.49%,1.46%,-1.85%,-1.56%,-3.0%,1.6%,7.1%,1.7%,-4.09%,-4.09%
 Hedefine,Growth Investing,1.2%,0.5%,0.5%,1.2%,7.8%,2.1%,-1.2%,-1.0%,-2.5%,2.0%,6.5%,2.5%,-3.5%,-3.8%
