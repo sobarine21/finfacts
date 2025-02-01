@@ -1,20 +1,28 @@
 import streamlit as st
 import pandas as pd
 from jinja2 import Environment
-import weasyprint
-import base64
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch
 from io import BytesIO
+import base64
 
 # --- Streamlit App ---
+st.set_page_config(page_title="Factsheet Generator", page_icon=":bar_chart:", layout="wide")  # Set page layout
 st.title("Factsheet Generator")
 
 # 1. File Uploads
-csv_file = st.file_uploader("Upload CSV Data", type="csv")
-template_file = st.file_uploader("Upload HTML Template", type="html")
-logo_file = st.file_uploader("Upload Logo (optional)", type=["png", "jpg", "jpeg"])
+col1, col2, col3 = st.columns(3)  # Create columns for layout
+
+with col1:
+    csv_file = st.file_uploader("Upload CSV Data", type="csv")
+with col2:
+    template_file = st.file_uploader("Upload HTML Template (optional)", type="html")  # Optional template
+with col3:
+    logo_file = st.file_uploader("Upload Logo (optional)", type=["png", "jpg", "jpeg"])
 
 # 2. Generate Button
-if csv_file and template_file:
+if csv_file:  # Only require CSV
     if st.button("Generate Factsheet"):
         try:
             # --- Data Processing ---
@@ -42,25 +50,60 @@ if csv_file and template_file:
                     }
                 }
 
-            # --- Template Rendering and PDF Generation ---
-            env = Environment()  # No loader needed for in-memory templates
-            template = env.from_string(template_file.getvalue().decode("utf-8"))  # Use template content directly
-
-            for index, row in df.iterrows():  # Iterate for multiple factsheets
+            # --- PDF Generation (ReportLab) ---
+            for index, row in df.iterrows():
                 fund_data = row.to_dict()
                 fund_data["performance_data"] = performance_data.get(fund_data.get("Fund Name"))
 
-                # --- Logo Handling ---
+                pdf_buffer = BytesIO()
+                doc = SimpleDocTemplate(pdf_buffer)
+                styles = getSampleStyleSheet()
+                story = []
+
+                # --- Logo Handling (ReportLab) ---
                 if logo_file:
-                    logo_base64 = base64.b64encode(logo_file.read()).decode("utf-8")
-                    fund_data["logo_base64"] = logo_base64
-                else:
-                    fund_data["logo_base64"] = None  # Explicitly set to None if no logo
+                    try:  # Handle potential image errors
+                        img = Image(logo_file, width=1*inch, height=1*inch)  # Adjust size as needed
+                        story.append(img)
+                        story.append(Spacer(1, 0.2 * inch))
+                    except Exception as e:
+                        st.warning(f"Error with logo: {e}")  # Display warning, but continue
 
-                html_output = template.render(fund_data)
+                story.append(Paragraph(f"{fund_data.get('Fund Name')} Factsheet", styles['h1']))
+                story.append(Spacer(1, 0.2 * inch))
 
-                # --- PDF Generation (In-memory) ---
-                pdf_bytes = weasyprint.HTML(string=html_output).write_pdf() # In-memory PDF
+                story.append(Paragraph(f"Investment Strategy: {fund_data.get('Investment Strategy')}", styles['Normal']))
+                story.append(Spacer(1, 0.2 * inch))
+
+                # --- Table 1 (Metrics) ---
+                table_data = [
+                    ["Metric", "Value"],
+                    ["Management Fee", fund_data.get('Management Fee')],
+                    ["Brokerage Fee", fund_data.get('Brokerage Fee')]
+                ]
+                table = Table(table_data)
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), '#CCCCCC'),
+                    ('GRID', (0, 0), (-1, -1), 1, '#000000')
+                ]))
+                story.append(table)
+                story.append(Spacer(1, 0.2 * inch))
+
+                # --- Table 2 (Performance) ---
+                performance_table_data = [["Month", "Portfolio", "SAPY"]]
+                for month, values in fund_data["performance_data"].items() if month != "SAPY":
+                    performance_table_data.append([month, values, fund_data["performance_data"]["SAPY"][month] if fund_data["performance_data"]["SAPY"] else ""])
+
+                performance_table = Table(performance_table_data)
+                performance_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), '#CCCCCC'),
+                    ('GRID', (0, 0), (-1, -1), 1, '#000000')
+                ]))
+
+                story.append(performance_table)
+
+                doc.build(story)
+                pdf_bytes = pdf_buffer.getvalue()
 
                 # --- Download Link ---
                 st.download_button(
@@ -70,85 +113,17 @@ if csv_file and template_file:
                     mime="application/pdf",
                 )
 
-
-
         except Exception as e:
             st.error(f"An error occurred: {e}")
 
 
-
-# --- Example Template (factsheet_template.html) ---
-# (This is now a multiline string in the code)
-
-template_str = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Factsheet</title>
-    <style>
-        body { font-family: sans-serif; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 8px; border: 1px solid #ddd; text-align: left; }
-        .logo { max-width: 200px; }
-    </style>
-</head>
-<body>
-
-    {% if logo_base64 %}
-    <img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo" class="logo">
-    {% endif %}
-
-    <h1>{{ Fund Name }} Factsheet</h1>
-
-    <p><strong>Investment Strategy:</strong> {{ Investment Strategy }}</p>
-
-    <table>
-        <thead>
-            <tr>
-                <th>Metric</th>
-                <th>Value</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td>Management Fee</td>
-                <td>{{ Management Fee }}</td>
-            </tr>
-            <tr>
-                <td>Brokerage Fee</td>
-                <td>{{ Brokerage Fee }}</td>
-            </tr>
-        </tbody>
-    </table>
-
-    <h2>Performance (Year to Date)</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Month</th>
-                <th>Portfolio</th>
-                <th>SAPY</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for month, values in performance_data.items() if month != "SAPY" %}
-            <tr>
-                <td>{{ month }}</td>
-                <td>{{ values }}</td>
-                <td>{{ performance_data.SAPY[month] if performance_data.SAPY }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-</body>
-</html>
-"""
-
-# --- Example CSV Data (factsheet_data.csv) ---
+# --- Example CSV Data (for demonstration) ---
 csv_data = """
 Fund Name,Investment Strategy,Management Fee,Brokerage Fee,January,February,March,April,May,June,SAPY_January,SAPY_February,SAPY_March,SAPY_April,SAPY_May,SAPY_June
 Growth Port,Value Investing,1.5%,0.6%,-0.1%,0.94%,8.49%,1.46%,-1.85%,-1.56%,-3.0%,1.6%,7.1%,1.7%,-4.09%,-4.09%
 Hedefine,Growth Investing,1.2%,0.5%,0.5%,1.2%,7.8%,2.1%,-1.2%,-1.0%,-2.5%,2.0%,6.5%,2.5%,-3.5%,-3.8%
 New Europe Property,Real Estate,1.0%,0.7%,-0.8%,0.7%,9.2%,1.0%,-2.2%,-1.7%,-3.2%,1.2%,8.0%,1.9%,-4.5%,-4.2%
 """
+
+# --- Optional HTML template (If user doesn't upload one, ReportLab is used) ---
+template_str = ""  # Empty, as ReportLab generates the PDF
