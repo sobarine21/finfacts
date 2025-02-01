@@ -6,6 +6,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from io import BytesIO
 import base64
+import io
 
 # --- Streamlit App ---
 st.set_page_config(page_title="Factsheet Generator", page_icon=":bar_chart:", layout="wide")  # Set page layout
@@ -21,7 +22,19 @@ with col2:
 with col3:
     logo_file = st.file_uploader("Upload Logo (optional)", type=["png", "jpg", "jpeg"])
 
-# 2. Generate Button
+# 2. Generate Button and CSV Template Download
+if st.button("Download CSV Template"):
+    csv_template = """Fund Name,Investment Strategy,Management Fee,Brokerage Fee,January,February,March,April,May,June,SAPY_January,SAPY_February,SAPY_March,SAPY_April,SAPY_May,SAPY_June
+Fund Example,Investment Strategy,1.0%,0.5%,0.0%,0.0%,0.0%,0.0%,0.0%,0.0%,0.0%,0.0%,0.0%,0.0%,0.0%,0.0%
+"""
+    st.download_button(
+        label="Download CSV Template",
+        data=csv_template,
+        file_name="factsheet_template.csv",
+        mime="text/csv",
+    )
+
+# 3. Generate Factsheet Button
 if csv_file:  # Only require CSV
     if st.button("Generate Factsheet"):
         try:
