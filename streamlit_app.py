@@ -1,109 +1,100 @@
 import streamlit as st
 import pandas as pd
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import inch
-from io import BytesIO
 import matplotlib.pyplot as plt
-import base64
+import io
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
 
-# Streamlit App Configuration
-st.set_page_config(page_title="Factsheet Generator", page_icon=":bar_chart:", layout="wide")
-st.title("Comprehensive Factsheet Generator")
+# Streamlit UI
+st.set_page_config(page_title="Convertible Bond Fund Factsheet", layout="wide")
 
-# File Upload Section
-col1, col2 = st.columns(2)
-with col1:
-    csv_file = st.file_uploader("Upload CSV Data", type="csv")
-with col2:
-    logo_file = st.file_uploader("Upload Logo (optional)", type=["png", "jpg", "jpeg"])
+st.title("📄 One-Pager Convertible Bond Fund Fact Sheet Generator")
 
-# Download CSV Template
-if st.button("Download CSV Template"):
-    csv_template = """Fund Name,Investment Strategy,Management Fee,Brokerage Fee,Investment Objective,Fund Composition,January,February,March,April,May,June,SAPY_January,SAPY_February,SAPY_March,SAPY_April,SAPY_May,SAPY_June
-Example Fund,Value Investing,1.0%,0.5%,Long-term growth,Stocks: 60%, Bonds: 30%, Real Estate: 10%,0.5%,1.2%,0.7%,-0.2%,1.5%,0.8%,1.0%,2.0%,1.5%,1.8%"""
-    st.download_button(label="Download CSV Template", data=csv_template, file_name="factsheet_template.csv", mime="text/csv")
+# Upload logo
+logo = st.file_uploader("Upload Company Logo", type=["png", "jpg", "jpeg"])
 
-# Generate Factsheet
-if csv_file and st.button("Generate Factsheet"):
-    df = pd.read_csv(csv_file)
-    required_columns = [
-        "Fund Name", "Investment Strategy", "Management Fee", "Brokerage Fee", "Investment Objective",
-        "Fund Composition", "January", "February", "March", "April", "May", "June",
-        "SAPY_January", "SAPY_February", "SAPY_March", "SAPY_April", "SAPY_May", "SAPY_June"
-    ]
-    if not all(col in df.columns for col in required_columns):
-        st.error("CSV is missing required columns. Please use the provided template.")
-        st.stop()
-    
-    for _, row in df.iterrows():
-        pdf_buffer = BytesIO()
-        doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
-        styles = getSampleStyleSheet()
-        story = []
+# Upload data file
+data_file = st.file_uploader("Upload CSV Data File", type=["csv"])
+if data_file:
+    df = pd.read_csv(data_file)
 
-        # Add Logo
-        if logo_file:
-            logo = Image(logo_file, width=1.5*inch, height=1.5*inch)
-            story.append(logo)
-        story.append(Paragraph(f"{row['Fund Name']} Factsheet", styles['Title']))
-        story.append(Spacer(1, 0.2 * inch))
-        story.append(Paragraph(f"Investment Strategy: {row['Investment Strategy']}", styles['Normal']))
-        story.append(Paragraph(f"Investment Objective: {row['Investment Objective']}", styles['Normal']))
-        story.append(Paragraph(f"Fund Composition: {row['Fund Composition']}", styles['Normal']))
-        story.append(Spacer(1, 0.4 * inch))
+# Company Details
+company_name = st.text_input("Enter Company Name", "Your Company Name")
+fund_value = st.text_input("Enter Convertible Bond Funds ($)", "$ XXXX")
+date = st.text_input("Enter Date", "XX-XX-XXXX")
 
-        # Metrics Table
-        metrics_data = [["Metric", "Value"],
-                        ["Management Fee", row["Management Fee"]],
-                        ["Brokerage Fee", row["Brokerage Fee"]]]
-        table = Table(metrics_data, colWidths=[2*inch, 3*inch])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), '#CCCCCC'),
-            ('GRID', (0, 0), (-1, -1), 1, '#000000')
-        ]))
-        story.append(table)
-        story.append(Spacer(1, 0.4 * inch))
+# Generate Charts
+st.subheader("📊 ROI Timeline")
+years = ["Year 1", "Year 2", "Year 3", "Year 4", "Year 5"]
+interest = [10, 20, 30, 40, 50]  # Example ROI Data
 
-        # Performance Table
-        performance_data = [["Month", "Portfolio", "SAPY"],
-                            ["January", row["January"], row["SAPY_January"]],
-                            ["February", row["February"], row["SAPY_February"]],
-                            ["March", row["March"], row["SAPY_March"]],
-                            ["April", row["April"], row["SAPY_April"]],
-                            ["May", row["May"], row["SAPY_May"]],
-                            ["June", row["June"], row["SAPY_June"]]]
-        perf_table = Table(performance_data)
-        perf_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), '#CCCCCC'),
-            ('GRID', (0, 0), (-1, -1), 1, '#000000')
-        ]))
-        story.append(perf_table)
-        story.append(Spacer(1, 0.4 * inch))
+fig, ax = plt.subplots()
+ax.plot(years, interest, marker="o", linestyle="-", color="blue")
+ax.set_ylabel("ROI %")
+ax.set_title("Convertible Bond ROI Timeline")
+st.pyplot(fig)
 
-        # Performance Graph
-        months = ["January", "February", "March", "April", "May", "June"]
-        portfolio_returns = [row[month] for month in months]
-        plt.figure(figsize=(5, 3))
-        plt.bar(months, portfolio_returns, color='skyblue')
-        plt.xlabel("Month")
-        plt.ylabel("Return (%)")
-        plt.title("Monthly Portfolio Performance")
-        graph_buffer = BytesIO()
-        plt.savefig(graph_buffer, format='png')
-        plt.close()
-        graph_buffer.seek(0)
-        img = Image(graph_buffer, width=5 * inch, height=3 * inch)
-        story.append(img)
-        story.append(Spacer(1, 0.4 * inch))
+st.subheader("📈 Annual Returns by Bond Type")
+bond_types = ["Convertible Bonds", "Traditional Bonds", "Stocks"]
+returns = [6.1, 7.5, -2.0]
 
-        # Generate and Download PDF
-        doc.build(story)
-        pdf_bytes = pdf_buffer.getvalue()
-        st.download_button(
-            label=f"Download Factsheet for {row['Fund Name']}",
-            data=pdf_bytes,
-            file_name=f"factsheet_{row['Fund Name']}.pdf",
-            mime="application/pdf",
-        )
+fig, ax = plt.subplots()
+ax.bar(bond_types, returns, color=["blue", "green", "red"])
+ax.set_ylabel("Total Annual Returns %")
+st.pyplot(fig)
+
+st.subheader("📉 Price of Convertible Bonds vs Stock Price")
+prices = {"Bond Price": [95, 100, 105, 110, 120], "Stock Price": [30, 40, 50, 60, 70]}
+
+fig, ax = plt.subplots()
+ax.plot(prices["Stock Price"], prices["Bond Price"], marker="o", linestyle="-", label="Bond Price")
+ax.set_xlabel("Stock Price")
+ax.set_ylabel("Bond Price")
+ax.legend()
+st.pyplot(fig)
+
+# Pie Chart
+st.subheader("🟢 Types of Convertible Bonds Issued")
+labels = ["Reverse Convertibles", "Mandatory Bonds", "Vanilla Convertible Bonds"]
+sizes = [30, 40, 30]
+fig, ax = plt.subplots()
+ax.pie(sizes, labels=labels, autopct="%1.1f%%", colors=["#4CAF50", "#FFC107", "#2196F3"])
+st.pyplot(fig)
+
+# Display Data Table
+st.subheader("📊 Convertible Bonds Comparison Table")
+if data_file:
+    st.write(df)
+
+# Generate PDF
+def generate_pdf():
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+
+    # Title
+    pdf.setFont("Helvetica-Bold", 16)
+    pdf.drawString(50, height - 50, "One Pager Convertible Bond Fund Fact Sheet")
+
+    # Company Info
+    pdf.setFont("Helvetica", 12)
+    pdf.drawString(50, height - 80, f"Company: {company_name}")
+    pdf.drawString(50, height - 100, f"Convertible Bond Funds: {fund_value}")
+    pdf.drawString(50, height - 120, f"Date: {date}")
+
+    # Add Logo
+    if logo:
+        img = ImageReader(logo)
+        pdf.drawImage(img, width - 150, height - 150, width=100, height=100)
+
+    # Save PDF
+    pdf.showPage()
+    pdf.save()
+    buffer.seek(0)
+    return buffer
+
+# Button to Download PDF
+if st.button("📥 Generate PDF Factsheet"):
+    pdf_data = generate_pdf()
+    st.download_button("Download PDF", pdf_data, "factsheet.pdf", "application/pdf")
