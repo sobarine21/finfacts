@@ -91,8 +91,9 @@ if csv_file:  # Only require CSV
 
                 # --- Table 2 (Performance) ---
                 performance_table_data = [["Month", "Portfolio", "SAPY"]]
-                for month, values in fund_data["performance_data"].items() if month != "SAPY":
-                    performance_table_data.append([month, values, fund_data["performance_data"]["SAPY"][month] if fund_data["performance_data"]["SAPY"] else ""])
+                for month, values in fund_data["performance_data"].items():
+                    if month != "SAPY":  # Skip "SAPY"
+                        performance_table_data.append([month, values, fund_data["performance_data"]["SAPY"].get(month, "") if fund_data["performance_data"]["SAPY"] else ""])
 
                 performance_table = Table(performance_table_data)
                 performance_table.setStyle(TableStyle([
